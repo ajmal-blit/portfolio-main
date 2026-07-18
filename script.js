@@ -105,9 +105,19 @@
     window.addEventListener("scroll", throttledUpdateNavigation, { passive: true });
 
     const revealElements = $$(".reveal");
-    revealElements.forEach((element) => {
-        const delay = Number(element.dataset.delay || 0);
-        element.style.setProperty("--reveal-delay", `${delay}ms`);
+    // Group elements for staggered reveals
+    const revealGroups = new Map();
+    revealElements.forEach(el => {
+        const parent = el.parentElement;
+        if (!revealGroups.has(parent)) revealGroups.set(parent, []);
+        revealGroups.get(parent).push(el);
+    });
+
+    revealGroups.forEach(group => {
+        group.forEach((element, i) => {
+            const baseDelay = Number(element.dataset.delay || 0);
+            element.style.setProperty("--reveal-delay", `${baseDelay + i * 85}ms`);
+        });
     });
 
     if (prefersReducedMotion || !("IntersectionObserver" in window)) {
@@ -158,7 +168,7 @@
             const rect = portraitStage.getBoundingClientRect();
             const x = (event.clientX - rect.left) / rect.width - .5;
             const y = (event.clientY - rect.top) / rect.height - .5;
-            portraitStage.style.transform = `perspective(900px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg)`;
+            portraitStage.style.transform = `perspective(1000px) rotateY(${x * 9}deg) rotateX(${-y * 9}deg)`;
         });
         portraitStage.addEventListener("mouseleave", () => {
             portraitStage.style.transform = "perspective(900px) rotateY(0) rotateX(0)";
@@ -171,7 +181,7 @@
                 const rect = card.getBoundingClientRect();
                 const x = (event.clientX - rect.left) / rect.width - .5;
                 const y = (event.clientY - rect.top) / rect.height - .5;
-                card.style.transform = `perspective(1100px) rotateY(${x * 4}deg) rotateX(${-y * 4}deg) translateY(-3px)`;
+                card.style.transform = `perspective(1200px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) translateY(-4px)`;
             });
             card.addEventListener("mouseleave", () => { card.style.transform = ""; });
         });
@@ -256,6 +266,7 @@
         let pointerX = 0;
         let pointerY = 0;
         let resizeTimeout;
+        let scrollY = window.scrollY;
         let currentTheme = document.documentElement.getAttribute("data-theme");
 
         const resizeCanvas = () => {
@@ -278,14 +289,21 @@
             }));
         };
 
+        window.addEventListener("scroll", () => { scrollY = window.scrollY; }, { passive: true });
+
         window.addEventListener("pointermove", (event) => {
-            pointerX = (event.clientX / width - .5) * 10;
-            pointerY = (event.clientY / height - .5) * 10;
+            pointerX = event.clientX;
+            pointerY = event.clientY;
         }, { passive: true });
 
         const draw = () => {
             context.clearRect(0, 0, width, height);
 
+            const isMobile = width < 768;
+
+            const pointerInfluenceX = isMobile ? 0 : (pointerX / width - .5) * 25;
+            const pointerInfluenceY = isMobile ? 0 : (pointerY / height - .5) * 25;
+            
             const isLightMode = currentTheme === "light";
             const particleColor = isLightMode ? "102, 112, 133" : "180, 217, 255"; // Muted gray for light, blue for dark
 
@@ -306,8 +324,11 @@
                     }
                 }
 
+                const parallaxOffsetX = pointerInfluenceX * (p.radius * 0.5);
+                const parallaxOffsetY = (pointerInfluenceY + (isMobile ? 0 : scrollY * 0.05)) * (p.radius * 0.5);
+
                 context.beginPath();
-                context.arc(p.x + pointerX, p.y + pointerY, p.radius, 0, Math.PI * 2);
+                context.arc(p.x + parallaxOffsetX, p.y + parallaxOffsetY, p.radius, 0, Math.PI * 2);
                 context.fillStyle = `rgba(${particleColor}, ${p.alpha})`;
                 context.fill();
             });
@@ -322,8 +343,10 @@
 
         // Observe theme changes to update animation
         new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
+            mutations.forEach((mutation) => {
                 if (mutation.attributeName === "data-theme") currentTheme = document.documentElement.getAttribute("data-theme");
+                const isLight = document.documentElement.getAttribute("data-theme") === "light";
+                document.documentElement.style.setProperty("--vignette-opacity", isLight ? "0.3" : "1");
             });
         }).observe(document.documentElement, { attributes: true });
 
